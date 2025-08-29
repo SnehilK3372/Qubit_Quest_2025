@@ -1,0 +1,53 @@
+trigger:
+ branches:
+  include:
+    - master
+    - stable/*
+pr:
+  autoCancel: true
+  branches:
+    include:
+    - '*'
+
+pool:
+  vmImage: 'ubuntu-latest'
+strategy:
+  matrix:
+    Python39:
+      python.version: '3.9'
+variables:
+  PIP_CACHE_DIR: $(Pipeline.Workspace)/.pip
+steps:
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '$(python.version)'
+  displayName: 'Use Python $(python.version)'
+- task: Cache@2
+  inputs:
+    key: 'pip | "$(Agent.OS)" | "$(python.version)" | "$(Build.BuildNumber)"'
+    restoreKeys: |
+      pip | "$(Agent.OS)" | "$(python.version)"
+      pip | "$(Agent.OS)"
+      pip
+    path: $(PIP_CACHE_DIR)
+  displayName: Cache pip
+- bash: |
+    set -e
+    sudo apt-get install -y pandoc graphviz
+    python -m pip install -U tox
+  displayName: 'Install system dependencies and tox'
+- bash: tox -e docs
+  displayName: 'Build Docs'
+- task: ArchiveFiles@2
+  inputs:
+    rootFolderOrFile: '_build/html'
+    archiveType: tar
+    archiveFile: '$(Build.ArtifactStagingDirectory)/html_docs.tar.gz'
+    verbose: true
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish docs'
+  inputs:
+    pathtoPublish: '$(Build.ArtifactStagingDirectory)'
+    artifactName: 'html_docs'
+    Parallel: true
+    ParallelCount: 8
